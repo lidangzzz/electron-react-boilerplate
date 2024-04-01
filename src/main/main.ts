@@ -8,12 +8,15 @@
  * When running `npm run build` or `npm run build:main`, this file is compiled to
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
+import fs from 'fs';
 import path from 'path';
-import { app, BrowserWindow, shell, ipcMain } from 'electron';
+import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
+
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
+
 
 class AppUpdater {
   constructor() {
@@ -25,11 +28,52 @@ class AppUpdater {
 
 let mainWindow: BrowserWindow | null = null;
 
+/**
+ * Add an ipcMain listener to read file paths with fs from the renderer process
+ * and send the file paths back to the renderer process.
+ */
+
 ipcMain.on('ipc-example', async (event, arg) => {
   const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
+  console.log('args:');
   console.log(msgTemplate(arg));
   event.reply('ipc-example', msgTemplate('pong'));
 });
+
+// 2. ipcMain read all files from the folder path
+ipcMain.handle('select-folder', async () => {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+    });
+    if (!canceled && filePaths.length > 0) {
+      return { filePaths };
+    }
+    return { filePaths: [] };
+  } catch (error) {
+    console.error('Error selecting folder:', error);
+    return { filePaths: [] };
+  }
+});
+
+ipcMain.handle('read-file', async (_, filePath: string) => {
+  try {
+    const fileContent = await fs.promises.readFile(filePath, 'utf8');
+    return fileContent;
+  } catch (error) {
+    console.error('Error reading file:', error);
+    return null;
+  }
+});
+
+
+// here is an example of how to use the ipc-example listener in the renderer process
+/**
+ * import { ipcRenderer } from 'electron';
+ * ipcRenderer.on('ipc-example', (event, arg) => {
+ *  console.log(arg); // prints: 'IPC test: pong'
+ * });
+ */
 
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
@@ -46,14 +90,14 @@ if (isDebug) {
 const installExtensions = async () => {
   const installer = require('electron-devtools-installer');
   const forceDownload = !!process.env.UPGRADE_EXTENSIONS;
-  const extensions = ['REACT_DEVELOPER_TOOLS'];
+  // //const extensions = ['REACT_DEVELOPER_TOOLS'];
 
-  return installer
-    .default(
-      extensions.map((name) => installer[name]),
-      forceDownload,
-    )
-    .catch(console.log);
+  // return installer
+  //   .default(
+  //     extensions.map((name) => installer[name]),
+  //     forceDownload,
+  //   )
+  //   .catch(console.log);
 };
 
 const createWindow = async () => {
@@ -75,6 +119,9 @@ const createWindow = async () => {
     height: 728,
     icon: getAssetPath('icon.png'),
     webPreferences: {
+      nodeIntegration: true,
+      nodeIntegrationInSubFrames: true,
+      nodeIntegrationInWorker: true,
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
         : path.join(__dirname, '../../.erb/dll/preload.js'),

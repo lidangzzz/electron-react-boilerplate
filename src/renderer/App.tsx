@@ -1,8 +1,14 @@
 import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
 import icon from '../../assets/icon.svg';
 import './App.css';
+import { ipcRenderer } from 'electron';
+
+
 
 function Hello() {
+  /**
+   * use ipcRenderer to send a message to the main process
+   */
   return (
     <div>
       <div className="Hello">
